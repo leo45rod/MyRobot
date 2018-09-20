@@ -5,7 +5,7 @@
  * which accompanies this distribution, and is available at
  * http://robocode.sourceforge.net/license/epl-v10.html
  */
-package sample;
+package SLLR;
 
 
 import robocode.HitByBulletEvent;
@@ -27,10 +27,10 @@ import java.awt.*;
  * @author Stefan Westen (original SGSample)
  * @author Pavel Savara (contributor)
  */
-public class PaintingRobot extends Robot {
+public class DaRealCliff extends Robot {
 
 	/**
-	 * PaintingRobot's run method - Seesaw
+	 * DaRealCliff's run method - Seesaw
 	 */
 	public void run() {
 		while (true) {
@@ -47,7 +47,17 @@ public class PaintingRobot extends Robot {
 	public void onScannedRobot(ScannedRobotEvent e) {
 		// demonstrate feature of debugging properties on RobotDialog
 		setDebugProperty("lastScannedRobot", e.getName() + " at " + e.getBearing() + " degrees at time " + getTime());
-		
+		// demonstrate feature of debugging properties on RobotDialog
+        setDebugProperty("lastScannedRobot", e.getName() + " at " + e.getBearing() + " degrees at time " + getTime());
+        setDebugProperty("lastScannedRobot", e.getName() + " at " + e.getBearing() + " degrees at time " + getTime());
+        locked = true;
+        double angleToEnemy = getHeadingRadians() + e.getBearingRadians();
+        // taking current direction of radar and subtracting the enemies position out in order to be facing the enemy
+        double radarTurn = Utils.normalRelativeAngle(angleToEnemy - getRadarHeadingRadians());
+        // 36 is how many pixels we scan left and scan right from center of robot
+        double extraTurn = Math.min(Math.atan(36.0 / e.getDistance()), Rules.RADAR_TURN_RATE_RADIANS);
+        radarTurn += (radarTurn < 0 ? -extraTurn : extraTurn);
+
 		fire(1);
 	}
 
