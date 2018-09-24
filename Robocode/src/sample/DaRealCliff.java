@@ -9,8 +9,11 @@ package sample;
 
 
 import robocode.HitByBulletEvent;
-import robocode.Robot;
+import robocode.AdvancedRobot;
 import robocode.ScannedRobotEvent;
+
+import robocode.util.Utils;
+import robocode.Rules;
 
 import java.awt.*;
 
@@ -27,7 +30,7 @@ import java.awt.*;
  * @author Stefan Westen (original SGSample)
  * @author Pavel Savara (contributor)
  */
-public class DaRealCliff extends Robot {
+public class DaRealCliff extends AdvancedRobot {
 
 	/**
 	 * DaRealCliff's run method - Seesaw
@@ -50,8 +53,8 @@ public class DaRealCliff extends Robot {
 		// demonstrate feature of debugging properties on RobotDialog
         setDebugProperty("lastScannedRobot", e.getName() + " at " + e.getBearing() + " degrees at time " + getTime());
         setDebugProperty("lastScannedRobot", e.getName() + " at " + e.getBearing() + " degrees at time " + getTime());
-        locked = true;
-        double angleToEnemy = getHeadingRadians() + e.getBearingRadians();
+        //locked = true;
+        double angleToEnemy = e.getHeadingRadians() + e.getBearingRadians();
         // taking current direction of radar and subtracting the enemies position out in order to be facing the enemy
         double radarTurn = Utils.normalRelativeAngle(angleToEnemy - getRadarHeadingRadians());
         // 36 is how many pixels we scan left and scan right from center of robot
