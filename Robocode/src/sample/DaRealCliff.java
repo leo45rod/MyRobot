@@ -37,29 +37,92 @@ public class DaRealCliff extends AdvancedRobot {
 	 */
 	public void run() {
 		while (true) {
-			ahead(100);
-			turnGunRight(360);
-			back(100);
-			turnGunRight(360);
+
 		}
 	}
 
 	/**
 	 * Fire when we see a robot
 	 */
+
+	public void updateWaves() {
+		for (int x = 0; x < _enemyWaves.size(); x++) {
+			EnemyWave ew = (EnemyWave)_enemyWaves.get(x);
+
+			ew.distanceTraveled = (getTime() - ew.fireTime) * ew.bulletVelocity;
+			if (ew.distanceTraveled >
+					_myLocation.distance(ew.fireLocation) + 50) {
+				_enemyWaves.remove(x);
+				x--;
+			}
+		}
+	}
+
+	public EnemyWave getClosestSurfableWave() {
+		double closestDistance = 50000; // I juse use some very big number here
+		EnemyWave surfWave = null;
+
+		for (int x = 0; x < _enemyWaves.size(); x++) {
+			EnemyWave ew = (EnemyWave)_enemyWaves.get(x);
+			double distance = _myLocation.distance(ew.fireLocation)
+					- ew.distanceTraveled;
+
+			if (distance > ew.bulletVelocity && distance < closestDistance) {
+				surfWave = ew;
+				closestDistance = distance;
+			}
+		}
+
+		return surfWave;
+	}
+
+	public static int getFactorIndex(EnemyWave ew, Point2D.Double targetLocation) {
+		double offsetAngle = (absoluteBearing(ew.fireLocation, targetLocation)
+				- ew.directAngle);
+		double factor = Utils.normalRelativeAngle(offsetAngle)
+				/ maxEscapeAngle(ew.bulletVelocity) * ew.direction;
+
+		return (int)limit(0,
+				(factor * ((BINS - 1) / 2)) + ((BINS - 1) / 2),
+				BINS - 1);
+	}
+
 	public void onScannedRobot(ScannedRobotEvent e) {
-		// demonstrate feature of debugging properties on RobotDialog
-		setDebugProperty("lastScannedRobot", e.getName() + " at " + e.getBearing() + " degrees at time " + getTime());
-		// demonstrate feature of debugging properties on RobotDialog
-        setDebugProperty("lastScannedRobot", e.getName() + " at " + e.getBearing() + " degrees at time " + getTime());
-        setDebugProperty("lastScannedRobot", e.getName() + " at " + e.getBearing() + " degrees at time " + getTime());
-        //locked = true;
-        double angleToEnemy = e.getHeadingRadians() + e.getBearingRadians();
-        // taking current direction of radar and subtracting the enemies position out in order to be facing the enemy
-        double radarTurn = Utils.normalRelativeAngle(angleToEnemy - getRadarHeadingRadians());
-        // 36 is how many pixels we scan left and scan right from center of robot
-        double extraTurn = Math.min(Math.atan(36.0 / e.getDistance()), Rules.RADAR_TURN_RATE_RADIANS);
-        radarTurn += (radarTurn < 0 ? -extraTurn : extraTurn);
+		_myLocation = new Point2D.Double(getX(), getY());
+
+		double lateralVelocity = getVelocity()*Math.sin(e.getBearingRadians());
+		double absBearing = e.getBearingRadians() + getHeadingRadians();
+
+		setTurnRadarRightRadians(Utils.normalRelativeAngle(absBearing
+				- getRadarHeadingRadians()) * 2);
+
+		_surfDirections.add(0,
+				new Integer((lateralVelocity >= 0) ? 1 : -1));
+		_surfAbsBearings.add(0, new Double(absBearing + Math.PI));
+
+
+		double bulletPower = _oppEnergy - e.getEnergy();
+		if (bulletPower < 3.01 && bulletPower > 0.09
+				&& _surfDirections.size() > 2) {
+			EnemyWave ew = new EnemyWave();
+			ew.fireTime = getTime() - 1;
+			ew.bulletVelocity = bulletVelocity(bulletPower);
+			ew.distanceTraveled = bulletVelocity(bulletPower);
+			ew.direction = ((Integer)_surfDirections.get(2)).intValue();
+			ew.directAngle = ((Double)_surfAbsBearings.get(2)).doubleValue();
+			ew.fireLocation = (Point2D.Double)_enemyLocation.clone(); // last tick
+
+			_enemyWaves.add(ew);
+		}
+
+		_oppEnergy = e.getEnergy();
+
+		// update after EnemyWave detection, because that needs the previous
+		// enemy location as the source of the wave
+		_enemyLocation = project(_myLocation, absBearing, e.getDistance());
+
+		updateWaves();
+		doSurfing();
 
 		fire(1);
 	}
