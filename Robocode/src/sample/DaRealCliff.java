@@ -45,6 +45,60 @@ public class DaRealCliff extends AdvancedRobot {
 	 * Fire when we see a robot
 	 */
 
+<<<<<<< Updated upstream
+=======
+	public Point2D.Double predictPosition(EnemyWave surfWave, int direction) {
+		Point2D.Double predictedPosition = (Point2D.Double)_myLocation.clone();
+		double predictedVelocity = getVelocity();
+		double predictedHeading = getHeadingRadians();
+		double maxTurning, moveAngle, moveDir;
+
+		int counter = 0; // number of ticks in the future
+		boolean intercepted = false;
+
+		do {    // the rest of these code comments are rozu's
+			moveAngle =
+					wallSmoothing(predictedPosition, absoluteBearing(surfWave.fireLocation,
+							predictedPosition) + (direction * (Math.PI/2)), direction)
+							- predictedHeading;
+			moveDir = 1;
+
+			if(Math.cos(moveAngle) < 0) {
+				moveAngle += Math.PI;
+				moveDir = -1;
+			}
+
+			moveAngle = Utils.normalRelativeAngle(moveAngle);
+
+			// maxTurning is built in like this, you can't turn more then this in one tick
+			maxTurning = Math.PI/720d*(40d - 3d*Math.abs(predictedVelocity));
+			predictedHeading = Utils.normalRelativeAngle(predictedHeading
+					+ limit(-maxTurning, moveAngle, maxTurning));
+
+			// this one is nice ;). if predictedVelocity and moveDir have
+			// different signs you want to breack down
+			// otherwise you want to accelerate (look at the factor "2")
+			predictedVelocity +=
+					(predictedVelocity * moveDir < 0 ? 2*moveDir : moveDir);
+			predictedVelocity = limit(-8, predictedVelocity, 8);
+
+			// calculate the new predicted position
+			predictedPosition = project(predictedPosition, predictedHeading,
+					predictedVelocity);
+
+			counter++;
+
+			if (predictedPosition.distance(surfWave.fireLocation) <
+					surfWave.distanceTraveled + (counter * surfWave.bulletVelocity)
+							+ surfWave.bulletVelocity) {
+				intercepted = true;
+			}
+		} while(!intercepted && counter < 500);
+
+		return predictedPosition;
+	}
+
+>>>>>>> Stashed changes
 	public void updateWaves() {
 		for (int x = 0; x < _enemyWaves.size(); x++) {
 			EnemyWave ew = (EnemyWave)_enemyWaves.get(x);
