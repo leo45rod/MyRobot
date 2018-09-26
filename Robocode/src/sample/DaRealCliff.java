@@ -334,11 +334,12 @@ public class DaRealCliff extends AdvancedRobot {
 				absBearing - getGunHeadingRadians() + angleOffset);
 		setTurnGunRightRadians(gunAdjust);
 
-		if (getGunHeat() == 0 && gunAdjust < Math.atan2(9, e.getDistance()) && setFireBullet(power) != null) {
-			fire(power);
+		if (getGunHeat() == 0 && gunAdjust < Math.atan2(9, e.getDistance()) && setFireBullet(0) != null) {
+
+			fire(bulletPower);
 
 		}
-		fire(1);
+
 	}
 
 	/**
