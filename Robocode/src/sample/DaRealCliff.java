@@ -14,7 +14,6 @@ import robocode.ScannedRobotEvent;
 import robocode.util.Utils;
 import java.awt.geom.*;
 import java.util.ArrayList;
-import robocode.Rules;
 import java.awt.*;
 
 
@@ -39,7 +38,7 @@ public class DaRealCliff extends AdvancedRobot {
 	 */
 
 
-
+	//WaveSurfing Variables
 	public static int BINS = 47;
 	public static double _surfStats[] = new double[BINS];
 	public Point2D.Double _myLocation;     // our bot's location
@@ -59,7 +58,16 @@ public class DaRealCliff extends AdvancedRobot {
 	public static Rectangle2D.Double _fieldRect = new java.awt.geom.Rectangle2D.Double(18, 18, 764, 564);
 	public static double WALL_STICK = 160;
 
+
+	//GuessFactor Targeting Variables
+	ArrayList waves = new ArrayList();
+	int[][] stats = new int[13][31];
+
+	int direction = 1;
+
+
 	public void run() {
+		//Wave Surfing
 		_enemyWaves = new ArrayList();
 		_surfDirections = new ArrayList();
 		_surfAbsBearings = new ArrayList();
@@ -245,10 +253,13 @@ public class DaRealCliff extends AdvancedRobot {
 
 		setBackAsFront(this, goAngle);
 	}
+	//Wave Surfing END
+
 
 
 	//What the bot does when it sees enemy
 	public void onScannedRobot(ScannedRobotEvent e) {
+		//WaveSurfing
 		_myLocation = new Point2D.Double(getX(), getY());
 
 		double lateralVelocity = getVelocity()*Math.sin(e.getBearingRadians());
@@ -284,7 +295,49 @@ public class DaRealCliff extends AdvancedRobot {
 
 		updateWaves();
 		doSurfing();
+		//WaveSurfing End
 
+
+		//Guessfactor Targeting
+		double eX = getX() + Math.sin(absBearing)*e.getDistance();
+		double eY = getY() + Math.cos(absBearing)*e.getDistance();
+
+		//the waves process
+		for(int i = 0; i<waves.size(); i++){
+			WaveBullet currentWave = (WaveBullet)waves.get(i);
+			i--;
+		}
+		//determines the power
+		double power = Math.min(3, Math.max(0.1, 1));
+
+		if(e.getVelocity()!=0){
+			if(Math.sin(e.getHeadingRadians()-absBearing)*e.getVelocity() <0){
+				direction -= 1;
+			}else{
+				direction = 1;
+			}
+
+		}
+		int[] currentStats = stats[(int)(e.getDistance() / 100)];
+
+		WaveBullet newWave = new WaveBullet(getX(), getY() ,absBearing, power,  getTime(), direction, currentStats);
+
+		int bestindex = 15;	// initialize it to be in the middle, guessfactor 0.
+		for (int i=0; i<31; i++)
+			if (currentStats[bestindex] < currentStats[i])
+				bestindex = i;
+
+		// this should do the opposite of the math in the WaveBullet:
+		double guessfactor = (double)(bestindex - (stats.length - 1) / 2) / ((stats.length - 1) / 2);
+		double angleOffset = direction * guessfactor * newWave.getMaxEscapeAngle();
+		double gunAdjust = Utils.normalRelativeAngle(
+				absBearing - getGunHeadingRadians() + angleOffset);
+		setTurnGunRightRadians(gunAdjust);
+
+		if (getGunHeat() == 0 && gunAdjust < Math.atan2(9, e.getDistance()) && setFireBullet(power) != null) {
+			fire(power);
+
+		}
 		fire(1);
 	}
 
@@ -321,4 +374,49 @@ public class DaRealCliff extends AdvancedRobot {
 		g.setColor(new Color(0, 0xFF, 0, 30));
 		g.fillOval((int) (getX() - 60), (int) (getY() - 60), 120, 120);
 	}
+
+	/**
+     * Created by liaquats on 9/26/18.
+     */
+    public static class WaveBullet {
+
+
+        private double startX, startY, time, startBearing, power;
+        private long fireTime;
+        private int direction;
+
+        private int[] rSegment;
+
+        public WaveBullet(double x, double y, double bearing, double p, long time, int direction, int[]segment ){
+
+            startX = x;
+            startY = y;
+            fireTime= time;
+            this.power = p;
+            this.direction = direction;
+            rSegment = segment;
+        }
+
+        public double getBulletSpeed(){
+            return 20 -  power*3;
+        }
+
+        public double getMaxEscapeAngle(){
+            return Math.asin(8/getBulletSpeed());
+        }
+        public boolean checkHit(double enemyX, double enemyY, long currentTime){
+
+            if(Point2D.distance(startX, startY, enemyX, enemyY)<= (currentTime-fireTime)*getBulletSpeed()) {
+                double desiredDirection = Math.atan2(enemyX - startX, enemyY - startY);
+                double angleOffset = Utils.normalRelativeAngle(desiredDirection - startBearing);
+                double guessFactor = Math.max(-1, Math.min(1, angleOffset/getMaxEscapeAngle()))*direction;
+                int index = (int)Math.round((rSegment.length-1)/2*(guessFactor+1));
+                rSegment[index]++;
+                return true;
+            }
+            return false;
+
+
+        }
+    }
 }
