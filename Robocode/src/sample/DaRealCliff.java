@@ -33,8 +33,32 @@ import java.awt.*;
 public class DaRealCliff extends AdvancedRobot {
 
 	/**
-	 * DaRealCliff's run method - Seesaw
+	 * DaRealCliff's run method
 	 */
+	import java.awt.geom.*;     // for Point2D's
+import java.util.ArrayList; // for collection of waves
+
+	public class BasicSurfer extends AdvancedRobot {
+		public static int BINS = 47;
+		public static double _surfStats[] = new double[BINS];
+		public Point2D.Double _myLocation;     // our bot's location
+		public Point2D.Double _enemyLocation;  // enemy bot's location
+
+		public ArrayList _enemyWaves;
+		public ArrayList _surfDirections;
+		public ArrayList _surfAbsBearings;
+
+		public static double _oppEnergy = 100.0;
+
+		/** This is a rectangle that represents an 800x600 battle field,
+		 * used for a simple, iterative WallSmoothing method (by PEZ).
+		 * The wall stick indicates the amount of space we try to always have on either end of the tank
+		 * (extending straight out the front or back) before touching a wall.
+		 */
+		public static Rectangle2D.Double _fieldRect
+				= new java.awt.geom.Rectangle2D.Double(18, 18, 764, 564);
+		public static double WALL_STICK = 160;
+
 	public void run() {
 		_enemyWaves = new ArrayList();
 		_surfDirections = new ArrayList();
@@ -48,9 +72,6 @@ public class DaRealCliff extends AdvancedRobot {
 		} while (true);
 	}
 
-	/**
-	 * Fire when we see a robot
-	 */
 
 	public Point2D.Double predictPosition(EnemyWave surfWave, int direction) {
 		Point2D.Double predictedPosition = (Point2D.Double)_myLocation.clone();
