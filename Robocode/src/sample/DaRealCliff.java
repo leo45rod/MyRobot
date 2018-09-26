@@ -30,34 +30,34 @@ import java.awt.*;
  * @author Stefan Westen (original SGSample)
  * @author Pavel Savara (contributor)
  */
+
+
 public class DaRealCliff extends AdvancedRobot {
 
 	/**
 	 * DaRealCliff's run method
 	 */
-	import java.awt.geom.*;     // for Point2D's
-import java.util.ArrayList; // for collection of waves
 
-	public class BasicSurfer extends AdvancedRobot {
-		public static int BINS = 47;
-		public static double _surfStats[] = new double[BINS];
-		public Point2D.Double _myLocation;     // our bot's location
-		public Point2D.Double _enemyLocation;  // enemy bot's location
 
-		public ArrayList _enemyWaves;
-		public ArrayList _surfDirections;
-		public ArrayList _surfAbsBearings;
 
-		public static double _oppEnergy = 100.0;
+	public static int BINS = 47;
+	public static double _surfStats[] = new double[BINS];
+	public Point2D.Double _myLocation;     // our bot's location
+	public Point2D.Double _enemyLocation;  // enemy bot's location
 
-		/** This is a rectangle that represents an 800x600 battle field,
+	public ArrayList _enemyWaves;
+	public ArrayList _surfDirections;
+	public ArrayList _surfAbsBearings;
+
+	public static double _oppEnergy = 100.0;
+
+	/** This is a rectangle that represents an 800x600 battle field,
 		 * used for a simple, iterative WallSmoothing method (by PEZ).
 		 * The wall stick indicates the amount of space we try to always have on either end of the tank
 		 * (extending straight out the front or back) before touching a wall.
-		 */
-		public static Rectangle2D.Double _fieldRect
-				= new java.awt.geom.Rectangle2D.Double(18, 18, 764, 564);
-		public static double WALL_STICK = 160;
+	 */
+	public static Rectangle2D.Double _fieldRect = new java.awt.geom.Rectangle2D.Double(18, 18, 764, 564);
+	public static double WALL_STICK = 160;
 
 	public void run() {
 		_enemyWaves = new ArrayList();
@@ -71,8 +71,66 @@ import java.util.ArrayList; // for collection of waves
 			turnRadarRightRadians(Double.POSITIVE_INFINITY);
 		} while (true);
 	}
+	///////////////////////Helper Methods
+	class EnemyWave {
+		Point2D.Double fireLocation;
+		long fireTime;
+		double bulletVelocity, directAngle, distanceTraveled;
+		int direction;
 
+		public EnemyWave() { }
+	}
+	public double wallSmoothing(Point2D.Double botLocation, double angle, int orientation) {
+		while (!_fieldRect.contains(project(botLocation, angle, WALL_STICK))) {
+			angle += orientation*0.05;
+		}
+		return angle;
+	}
 
+	public static Point2D.Double project(Point2D.Double sourceLocation,
+										 double angle, double length) {
+		return new Point2D.Double(sourceLocation.x + Math.sin(angle) * length,
+				sourceLocation.y + Math.cos(angle) * length);
+	}
+
+	public static double absoluteBearing(Point2D.Double source, Point2D.Double target) {
+		return Math.atan2(target.x - source.x, target.y - source.y);
+	}
+
+	public static double limit(double min, double value, double max) {
+		return Math.max(min, Math.min(value, max));
+	}
+
+	public static double bulletVelocity(double power) {
+		return (20.0 - (3.0*power));
+	}
+
+	public static double maxEscapeAngle(double velocity) {
+		return Math.asin(8.0/velocity);
+	}
+
+	public static void setBackAsFront(AdvancedRobot robot, double goAngle) {
+		double angle =
+				Utils.normalRelativeAngle(goAngle - robot.getHeadingRadians());
+		if (Math.abs(angle) > (Math.PI/2)) {
+			if (angle < 0) {
+				robot.setTurnRightRadians(Math.PI + angle);
+			} else {
+				robot.setTurnLeftRadians(Math.PI - angle);
+			}
+			robot.setBack(100);
+		} else {
+			if (angle < 0) {
+				robot.setTurnLeftRadians(-1*angle);
+			} else {
+				robot.setTurnRightRadians(angle);
+			}
+			robot.setAhead(100);
+		}
+	}
+	//Helper method end
+
+	//Surfing the Waves
 	public Point2D.Double predictPosition(EnemyWave surfWave, int direction) {
 		Point2D.Double predictedPosition = (Point2D.Double)_myLocation.clone();
 		double predictedVelocity = getVelocity();
@@ -136,7 +194,12 @@ import java.util.ArrayList; // for collection of waves
 			}
 		}
 	}
+	public double checkDanger(EnemyWave surfWave, int direction) {
+		int index = getFactorIndex(surfWave,
+				predictPosition(surfWave, direction));
 
+		return _surfStats[index];
+	}
 	public EnemyWave getClosestSurfableWave() {
 		double closestDistance = 50000; // I juse use some very big number here
 		EnemyWave surfWave = null;
@@ -165,7 +228,26 @@ import java.util.ArrayList; // for collection of waves
 				(factor * ((BINS - 1) / 2)) + ((BINS - 1) / 2),
 				BINS - 1);
 	}
+	public void doSurfing() {
+		EnemyWave surfWave = getClosestSurfableWave();
 
+		if (surfWave == null) { return; }
+
+		double dangerLeft = checkDanger(surfWave, -1);
+		double dangerRight = checkDanger(surfWave, 1);
+
+		double goAngle = absoluteBearing(surfWave.fireLocation, _myLocation);
+		if (dangerLeft < dangerRight) {
+			goAngle = wallSmoothing(_myLocation, goAngle - (Math.PI/2), -1);
+		} else {
+			goAngle = wallSmoothing(_myLocation, goAngle + (Math.PI/2), 1);
+		}
+
+		setBackAsFront(this, goAngle);
+	}
+
+
+	//What the bot does when it sees enemy
 	public void onScannedRobot(ScannedRobotEvent e) {
 		_myLocation = new Point2D.Double(getX(), getY());
 
