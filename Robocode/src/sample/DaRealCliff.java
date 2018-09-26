@@ -11,10 +11,10 @@ package sample;
 import robocode.HitByBulletEvent;
 import robocode.AdvancedRobot;
 import robocode.ScannedRobotEvent;
-
 import robocode.util.Utils;
+import java.awt.geom.*;
+import java.util.ArrayList;
 import robocode.Rules;
-
 import java.awt.*;
 
 
@@ -36,17 +36,22 @@ public class DaRealCliff extends AdvancedRobot {
 	 * DaRealCliff's run method - Seesaw
 	 */
 	public void run() {
-		while (true) {
+		_enemyWaves = new ArrayList();
+		_surfDirections = new ArrayList();
+		_surfAbsBearings = new ArrayList();
 
-		}
+		setAdjustGunForRobotTurn(true);
+		setAdjustRadarForGunTurn(true);
+
+		do {
+			turnRadarRightRadians(Double.POSITIVE_INFINITY);
+		} while (true);
 	}
 
 	/**
 	 * Fire when we see a robot
 	 */
 
-<<<<<<< Updated upstream
-=======
 	public Point2D.Double predictPosition(EnemyWave surfWave, int direction) {
 		Point2D.Double predictedPosition = (Point2D.Double)_myLocation.clone();
 		double predictedVelocity = getVelocity();
@@ -98,7 +103,6 @@ public class DaRealCliff extends AdvancedRobot {
 		return predictedPosition;
 	}
 
->>>>>>> Stashed changes
 	public void updateWaves() {
 		for (int x = 0; x < _enemyWaves.size(); x++) {
 			EnemyWave ew = (EnemyWave)_enemyWaves.get(x);
