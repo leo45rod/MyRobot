@@ -62,7 +62,7 @@ public class DaRealCliff extends AdvancedRobot {
 
 
 	//GuessFactor Targeting Variables
-	List<WaveBullet> waves = new ArrayList<WaveBullet>();
+	//List<WaveBullet> waves = new ArrayList<WaveBullet>();
 	int[][] stats = new int[13][31];
 
 	int direction = 1;
@@ -81,6 +81,7 @@ public class DaRealCliff extends AdvancedRobot {
 			turnRadarRightRadians(Double.POSITIVE_INFINITY);
 		} while (true);
 	}
+	double oldEnemyHeading = 0;
 
 	//What the bot does when it sees enemy
 	public void onScannedRobot(ScannedRobotEvent e) {
@@ -121,8 +122,49 @@ public class DaRealCliff extends AdvancedRobot {
 		updateWaves();
 		doSurfing();
 		//WaveSurfing End
+		double Power = Math.min(3.0,getEnergy());
+		double myX = getX();
+		double myY = getY();
+		double absoluteBearing = getHeadingRadians() + e.getBearingRadians();
+		double enemyX = getX() + e.getDistance() * Math.sin(absoluteBearing);
+		double enemyY = getY() + e.getDistance() * Math.cos(absoluteBearing);
+		double enemyHeading = e.getHeadingRadians();
 
+		double enemyHeadingChange = enemyHeading - oldEnemyHeading;
+		double enemyVelocity = e.getVelocity();
+		oldEnemyHeading = enemyHeading;
 
+		double deltaTime = 0;
+		double battleFieldHeight = getBattleFieldHeight(),
+				battleFieldWidth = getBattleFieldWidth();
+		double predictedX = enemyX, predictedY = enemyY;
+		while((++deltaTime) * (20.0 - 3.0 * bulletPower) <
+				Point2D.Double.distance(myX, myY, predictedX, predictedY)){
+			predictedX += Math.sin(enemyHeading) * enemyVelocity;
+			predictedY += Math.cos(enemyHeading) * enemyVelocity;
+			enemyHeading += enemyHeadingChange;
+			if(	predictedX < 18.0
+					|| predictedY < 18.0
+					|| predictedX > battleFieldWidth - 18.0
+					|| predictedY > battleFieldHeight - 18.0){
+
+				predictedX = Math.min(Math.max(18.0, predictedX),
+						battleFieldWidth - 18.0);
+				predictedY = Math.min(Math.max(18.0, predictedY),
+						battleFieldHeight - 18.0);
+				break;
+			}
+		}
+		double theta = Utils.normalAbsoluteAngle(Math.atan2(
+				predictedX - getX(), predictedY - getY()));
+
+		setTurnRadarRightRadians(Utils.normalRelativeAngle(
+				absoluteBearing - getRadarHeadingRadians()));
+		setTurnGunRightRadians(Utils.normalRelativeAngle(
+				theta - getGunHeadingRadians()));
+		fire(3);
+
+/**
 		//Guessfactor Targeting
 		double eX = getX() + Math.sin(absBearing)*e.getDistance();
 		double eY = getY() + Math.cos(absBearing)*e.getDistance();
@@ -169,6 +211,7 @@ public class DaRealCliff extends AdvancedRobot {
 			fire(power);
 
 		}
+ **/
 
 	}
 
@@ -419,11 +462,14 @@ public class DaRealCliff extends AdvancedRobot {
 	//Wave Surfing END
 
 
+	}
+
 
 
 	/**
      * Created by liaquats on 9/26/18.
      */
+	/**
 	public class WaveBullet
 	{
 		private double startX, startY, startBearing, power;
@@ -470,4 +516,5 @@ public class DaRealCliff extends AdvancedRobot {
 			return false;
 		}
 	} // end WaveBullet class
-}
+	 **/
+
