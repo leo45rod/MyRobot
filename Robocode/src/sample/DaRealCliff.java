@@ -13,7 +13,9 @@ import robocode.AdvancedRobot;
 import robocode.ScannedRobotEvent;
 import robocode.util.Utils;
 import java.awt.geom.*;
+
 import java.util.ArrayList;
+import java.util.List;
 import java.awt.*;
 
 
@@ -60,7 +62,7 @@ public class DaRealCliff extends AdvancedRobot {
 
 
 	//GuessFactor Targeting Variables
-	ArrayList waves = new ArrayList();
+	List<WaveBullet> waves = new ArrayList<WaveBullet>();
 	int[][] stats = new int[13][31];
 
 	int direction = 1;
@@ -72,13 +74,163 @@ public class DaRealCliff extends AdvancedRobot {
 		_surfDirections = new ArrayList();
 		_surfAbsBearings = new ArrayList();
 
-		setAdjustGunForRobotTurn(true);
+		//setAdjustGunForRobotTurn(true);
 		setAdjustRadarForGunTurn(true);
 
 		do {
 			turnRadarRightRadians(Double.POSITIVE_INFINITY);
 		} while (true);
 	}
+
+	//What the bot does when it sees enemy
+	public void onScannedRobot(ScannedRobotEvent e) {
+		//WaveSurfing
+		_myLocation = new Point2D.Double(getX(), getY());
+
+		double lateralVelocity = getVelocity()*Math.sin(e.getBearingRadians());
+		double absBearing = e.getBearingRadians() + getHeadingRadians();
+
+		setTurnRadarRightRadians(Utils.normalRelativeAngle(absBearing
+				- getRadarHeadingRadians()) * 2);
+
+		_surfDirections.add(0,
+				new Integer((lateralVelocity >= 0) ? 1 : -1));
+		_surfAbsBearings.add(0, new Double(absBearing + Math.PI));
+
+
+		double bulletPower = _oppEnergy - e.getEnergy();
+		if (bulletPower < 3.01 && bulletPower > 0.09
+				&& _surfDirections.size() > 2) {
+			EnemyWave ew = new EnemyWave();
+			ew.fireTime = getTime() - 1;
+			ew.bulletVelocity = bulletVelocity(bulletPower);
+			ew.distanceTraveled = bulletVelocity(bulletPower);
+			ew.direction = ((Integer)_surfDirections.get(2)).intValue();
+			ew.directAngle = ((Double)_surfAbsBearings.get(2)).doubleValue();
+			ew.fireLocation = (Point2D.Double)_enemyLocation.clone(); // last tick
+
+			_enemyWaves.add(ew);
+		}
+
+		_oppEnergy = e.getEnergy();
+
+		// update after EnemyWave detection, because that needs the previous
+		// enemy location as the source of the wave
+		_enemyLocation = project(_myLocation, absBearing, e.getDistance());
+
+		updateWaves();
+		doSurfing();
+		//WaveSurfing End
+
+
+		//Guessfactor Targeting
+		double eX = getX() + Math.sin(absBearing)*e.getDistance();
+		double eY = getY() + Math.cos(absBearing)*e.getDistance();
+
+		//the waves process
+		for(int i = 0; i<waves.size(); i++){
+			WaveBullet currentWave = (WaveBullet)waves.get(i);
+			if (currentWave.checkHit(eX, eY, getTime()))
+			{
+				waves.remove(currentWave);
+				i--;
+			}
+		}
+		//determines the power
+		double power = Math.min(3, Math.max(0.1, 1));
+
+		if(e.getVelocity()!=0){
+			if(Math.sin(e.getHeadingRadians()-absBearing)*e.getVelocity() <0){
+				direction -= 1;
+			}else{
+				direction = 1;
+			}
+
+		}
+		int[] currentStats = stats[Math.min(10, (int)((e.getDistance() / (20 - 3 * bulletPower)) / 10))];
+
+		WaveBullet newWave = new WaveBullet(getX(), getY() ,absBearing, power, direction, getTime(), currentStats);
+
+		int bestindex = 15;	// initialize it to be in the middle, guessfactor 0.
+		for (int i=0; i<31; i++)
+			if (currentStats[bestindex] < currentStats[i])
+				bestindex = i;
+
+		// this should do the opposite of the math in the WaveBullet:
+		double guessfactor = (double)(bestindex - (stats.length - 1) / 2) / ((stats.length - 1) / 2);
+		double angleOffset = direction * guessfactor * newWave.maxEscapeAngle();
+		double gunAdjust = Utils.normalRelativeAngle(
+				absBearing - getGunHeadingRadians() + angleOffset);
+		setTurnGunRightRadians(gunAdjust);
+		if (setFireBullet(0) != null)
+			waves.add(newWave);
+		if (getGunHeat() == 0 && gunAdjust < Math.atan2(9, e.getDistance()) && setFireBullet(0) != null) {
+
+			fire(power);
+
+		}
+
+	}
+
+	/**
+	 * We were hit!  Turn perpendicular to the bullet,
+	 * so our seesaw might avoid a future shot.
+	 * In addition, draw orange circles where we were hit.
+	 */
+	public void onHitByBullet(HitByBulletEvent e) {
+		// demonstrate feature of debugging properties on RobotDialog
+		setDebugProperty("lastHitBy", e.getName() + " with power of bullet " + e.getPower() + " at time " + getTime());
+
+		// show how to remove debugging property
+		setDebugProperty("lastScannedRobot", null);
+
+		// gebugging by painting to battle view
+		Graphics2D g = getGraphics();
+
+		g.setColor(Color.orange);
+		g.drawOval((int) (getX() - 55), (int) (getY() - 55), 110, 110);
+		g.drawOval((int) (getX() - 56), (int) (getY() - 56), 112, 112);
+		g.drawOval((int) (getX() - 59), (int) (getY() - 59), 118, 118);
+		g.drawOval((int) (getX() - 60), (int) (getY() - 60), 120, 120);
+
+		//Wave Surfing - when hit by bullet
+		if (!_enemyWaves.isEmpty()) {
+			Point2D.Double hitBulletLocation = new Point2D.Double(
+					e.getBullet().getX(), e.getBullet().getY());
+			EnemyWave hitWave = null;
+
+			// look through the EnemyWaves, and find one that could've hit us.
+			for (int x = 0; x < _enemyWaves.size(); x++) {
+				EnemyWave ew = (EnemyWave)_enemyWaves.get(x);
+
+				if (Math.abs(ew.distanceTraveled -
+						_myLocation.distance(ew.fireLocation)) < 50
+						&& Math.abs(bulletVelocity(e.getBullet().getPower())
+						- ew.bulletVelocity) < 0.001) {
+					hitWave = ew;
+					break;
+				}
+			}
+
+			if (hitWave != null) {
+				logHit(hitWave, hitBulletLocation);
+
+				// We can remove this wave now, of course.
+				_enemyWaves.remove(_enemyWaves.lastIndexOf(hitWave));
+			}
+		}
+	}
+
+	/**
+	 * Paint a red circle around our PaintingRobot
+	 */
+	public void onPaint(Graphics2D g) {
+		g.setColor(Color.red);
+		g.drawOval((int) (getX() - 50), (int) (getY() - 50), 100, 100);
+		g.setColor(new Color(0, 0xFF, 0, 30));
+		g.fillOval((int) (getX() - 60), (int) (getY() - 60), 120, 120);
+	}
+
 	///////////////////////Helper Methods
 	class EnemyWave {
 		Point2D.Double fireLocation;
@@ -236,6 +388,17 @@ public class DaRealCliff extends AdvancedRobot {
 				(factor * ((BINS - 1) / 2)) + ((BINS - 1) / 2),
 				BINS - 1);
 	}
+	public void logHit(EnemyWave ew, Point2D.Double targetLocation) {
+		int index = getFactorIndex(ew, targetLocation);
+
+		for (int x = 0; x < BINS; x++) {
+			// for the spot bin that we were hit on, add 1;
+			// for the bins next to it, add 1 / 2;
+			// the next one, add 1 / 5; and so on...
+			_surfStats[x] += 1.0 / (Math.pow(index - x, 2) + 1);
+		}
+	}
+
 	public void doSurfing() {
 		EnemyWave surfWave = getClosestSurfableWave();
 
@@ -257,167 +420,54 @@ public class DaRealCliff extends AdvancedRobot {
 
 
 
-	//What the bot does when it sees enemy
-	public void onScannedRobot(ScannedRobotEvent e) {
-		//WaveSurfing
-		_myLocation = new Point2D.Double(getX(), getY());
-
-		double lateralVelocity = getVelocity()*Math.sin(e.getBearingRadians());
-		double absBearing = e.getBearingRadians() + getHeadingRadians();
-
-		setTurnRadarRightRadians(Utils.normalRelativeAngle(absBearing
-				- getRadarHeadingRadians()) * 2);
-
-		_surfDirections.add(0,
-				new Integer((lateralVelocity >= 0) ? 1 : -1));
-		_surfAbsBearings.add(0, new Double(absBearing + Math.PI));
-
-
-		double bulletPower = _oppEnergy - e.getEnergy();
-		if (bulletPower < 3.01 && bulletPower > 0.09
-				&& _surfDirections.size() > 2) {
-			EnemyWave ew = new EnemyWave();
-			ew.fireTime = getTime() - 1;
-			ew.bulletVelocity = bulletVelocity(bulletPower);
-			ew.distanceTraveled = bulletVelocity(bulletPower);
-			ew.direction = ((Integer)_surfDirections.get(2)).intValue();
-			ew.directAngle = ((Double)_surfAbsBearings.get(2)).doubleValue();
-			ew.fireLocation = (Point2D.Double)_enemyLocation.clone(); // last tick
-
-			_enemyWaves.add(ew);
-		}
-
-		_oppEnergy = e.getEnergy();
-
-		// update after EnemyWave detection, because that needs the previous
-		// enemy location as the source of the wave
-		_enemyLocation = project(_myLocation, absBearing, e.getDistance());
-
-		updateWaves();
-		doSurfing();
-		//WaveSurfing End
-
-
-		//Guessfactor Targeting
-		double eX = getX() + Math.sin(absBearing)*e.getDistance();
-		double eY = getY() + Math.cos(absBearing)*e.getDistance();
-
-		//the waves process
-		for(int i = 0; i<waves.size(); i++){
-			WaveBullet currentWave = (WaveBullet)waves.get(i);
-			i--;
-		}
-		//determines the power
-		double power = Math.min(3, Math.max(0.1, 1));
-
-		if(e.getVelocity()!=0){
-			if(Math.sin(e.getHeadingRadians()-absBearing)*e.getVelocity() <0){
-				direction -= 1;
-			}else{
-				direction = 1;
-			}
-
-		}
-		int[] currentStats = stats[(int)(e.getDistance() / 100)];
-
-		WaveBullet newWave = new WaveBullet(getX(), getY() ,absBearing, power,  getTime(), direction, currentStats);
-
-		int bestindex = 15;	// initialize it to be in the middle, guessfactor 0.
-		for (int i=0; i<31; i++)
-			if (currentStats[bestindex] < currentStats[i])
-				bestindex = i;
-
-		// this should do the opposite of the math in the WaveBullet:
-		double guessfactor = (double)(bestindex - (stats.length - 1) / 2) / ((stats.length - 1) / 2);
-		double angleOffset = direction * guessfactor * newWave.getMaxEscapeAngle();
-		double gunAdjust = Utils.normalRelativeAngle(
-				absBearing - getGunHeadingRadians() + angleOffset);
-		setTurnGunRightRadians(gunAdjust);
-
-		if (getGunHeat() == 0 && gunAdjust < Math.atan2(9, e.getDistance()) && setFireBullet(0) != null) {
-
-			fire(bulletPower);
-
-		}
-
-	}
-
-	/**
-	 * We were hit!  Turn perpendicular to the bullet,
-	 * so our seesaw might avoid a future shot.
-	 * In addition, draw orange circles where we were hit.
-	 */
-	public void onHitByBullet(HitByBulletEvent e) {
-		// demonstrate feature of debugging properties on RobotDialog
-		setDebugProperty("lastHitBy", e.getName() + " with power of bullet " + e.getPower() + " at time " + getTime());
-
-		// show how to remove debugging property
-		setDebugProperty("lastScannedRobot", null);
-
-		// gebugging by painting to battle view
-		Graphics2D g = getGraphics();
-
-		g.setColor(Color.orange);
-		g.drawOval((int) (getX() - 55), (int) (getY() - 55), 110, 110);
-		g.drawOval((int) (getX() - 56), (int) (getY() - 56), 112, 112);
-		g.drawOval((int) (getX() - 59), (int) (getY() - 59), 118, 118);
-		g.drawOval((int) (getX() - 60), (int) (getY() - 60), 120, 120);
-
-		turnLeft(90 - e.getBearing());
-	}
-
-	/**
-	 * Paint a red circle around our PaintingRobot
-	 */
-	public void onPaint(Graphics2D g) {
-		g.setColor(Color.red);
-		g.drawOval((int) (getX() - 50), (int) (getY() - 50), 100, 100);
-		g.setColor(new Color(0, 0xFF, 0, 30));
-		g.fillOval((int) (getX() - 60), (int) (getY() - 60), 120, 120);
-	}
 
 	/**
      * Created by liaquats on 9/26/18.
      */
-    public static class WaveBullet {
+	public class WaveBullet
+	{
+		private double startX, startY, startBearing, power;
+		private long   fireTime;
+		private int    direction;
+		private int[]  returnSegment;
 
+		public WaveBullet(double x, double y, double bearing, double power,
+						  int direction, long time, int[] segment)
+		{
+			startX         = x;
+			startY         = y;
+			startBearing   = bearing;
+			this.power     = power;
+			this.direction = direction;
+			fireTime       = time;
+			returnSegment  = segment;
+		}
 
-        private double startX, startY, time, startBearing, power;
-        private long fireTime;
-        private int direction;
+		public double getBulletSpeed()
+		{
+			return 20 - power * 3;
+		}
 
-        private int[] rSegment;
-
-        public WaveBullet(double x, double y, double bearing, double p, long time, int direction, int[]segment ){
-
-            startX = x;
-            startY = y;
-            fireTime= time;
-            this.power = p;
-            this.direction = direction;
-            rSegment = segment;
-        }
-
-        public double getBulletSpeed(){
-            return 20 -  power*3;
-        }
-
-        public double getMaxEscapeAngle(){
-            return Math.asin(8/getBulletSpeed());
-        }
-        public boolean checkHit(double enemyX, double enemyY, long currentTime){
-
-            if(Point2D.distance(startX, startY, enemyX, enemyY)<= (currentTime-fireTime)*getBulletSpeed()) {
-                double desiredDirection = Math.atan2(enemyX - startX, enemyY - startY);
-                double angleOffset = Utils.normalRelativeAngle(desiredDirection - startBearing);
-                double guessFactor = Math.max(-1, Math.min(1, angleOffset/getMaxEscapeAngle()))*direction;
-                int index = (int)Math.round((rSegment.length-1)/2*(guessFactor+1));
-                rSegment[index]++;
-                return true;
-            }
-            return false;
-
-
-        }
-    }
+		public double maxEscapeAngle()
+		{
+			return Math.asin(8 / getBulletSpeed());
+		}
+		public boolean checkHit(double enemyX, double enemyY, long currentTime)
+		{
+			// if the distance from the wave origin to our enemy has passed
+			// the distance the bullet would have traveled...
+			if (Point2D.distance(startX, startY, enemyX, enemyY) <=
+					(currentTime - fireTime) * getBulletSpeed())
+			{
+				double desiredDirection = Math.atan2(enemyX - startX, enemyY - startY);
+				double angleOffset = Utils.normalRelativeAngle(desiredDirection - startBearing);
+				double guessFactor =
+						Math.max(-1, Math.min(1, angleOffset / maxEscapeAngle())) * direction;
+				int index = (int) Math.round((returnSegment.length - 1) /2 * (guessFactor + 1));
+				returnSegment[index]++;
+				return true;
+			}
+			return false;
+		}
+	} // end WaveBullet class
 }
